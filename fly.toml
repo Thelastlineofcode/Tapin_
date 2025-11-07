@@ -1,0 +1,34 @@
+app = "tapin-backend"
+primary_region = "iad" # Change to your preferred Fly.io region
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[env]
+  PORT = "5000"
+
+[[services]]
+  internal_port = 5000
+  protocol = "tcp"
+
+  [[services.ports]]
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.health_checks]]
+    path = "/api/health"
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "get"
+    protocol = "http"
+    restart_limit = 0
