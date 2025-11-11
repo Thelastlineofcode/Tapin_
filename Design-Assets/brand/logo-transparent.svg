@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+  <!-- TapIn Logo -->
+  <text x="10" y="40" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#4a90e2">
+    TapIn
+  </text>
+  <circle cx="170" cy="30" r="15" fill="none" stroke="#4a90e2" stroke-width="2"/>
+  <circle cx="170" cy="30" r="8" fill="#4a90e2"/>
+</svg>

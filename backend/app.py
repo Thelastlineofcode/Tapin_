@@ -84,7 +84,7 @@ _warn_on_default_secrets()
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
     # simple role column for basic RBAC (default: "user")
     role = db.Column(db.String(50), default='user')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -250,7 +250,7 @@ def register_user():
     db.session.add(user)
     db.session.commit()
     # return both access and refresh tokens (identity stored as string)
-    from backend.auth import token_pair
+    from auth import token_pair
 
     tokens = token_pair(user)
     return jsonify({"message": "user created", "user": user.to_dict(), **tokens}), 201
@@ -265,7 +265,7 @@ def login_user():
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({"error": "invalid credentials"}), 401
     # return both access and refresh tokens to the client
-    from backend.auth import token_pair
+    from auth import token_pair
 
     tokens = token_pair(user)
     return jsonify({"message": "login successful", "user": user.to_dict(), **tokens})
@@ -599,4 +599,4 @@ def get_listing_average_rating(id):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5000)

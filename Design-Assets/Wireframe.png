@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+  <!-- Empty state illustration - simplified wireframe style -->
+  <defs>
+    <style>
+      .wireframe-stroke { stroke: #d1d5db; stroke-width: 2; fill: none; }
+      .wireframe-fill { fill: #f3f4f6; }
+      .accent { fill: #4a90e2; opacity: 0.3; }
+    </style>
+  </defs>
+
+  <!-- Background grid pattern -->
+  <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e5e7eb" stroke-width="0.5"/>
+  </pattern>
+  <rect width="400" height="300" fill="url(#grid)"/>
+
+  <!-- Main document/page outline -->
+  <rect x="80" y="40" width="240" height="220" rx="8" class="wireframe-fill wireframe-stroke"/>
+
+  <!-- Empty box icon in center -->
+  <g transform="translate(200, 120)">
+    <!-- Box -->
+    <path d="M -35,-25 L 35,-25 L 35,25 L -35,25 Z" class="wireframe-stroke"/>
+    <path d="M -35,-25 L 0,-40 L 35,-25" class="wireframe-stroke"/>
+    <path d="M 0,-40 L 0,10" class="wireframe-stroke"/>
+
+    <!-- Accent circle -->
+    <circle cx="0" cy="-5" r="30" class="accent"/>
+  </g>
+
+  <!-- Text placeholder lines -->
+  <rect x="120" y="170" width="160" height="8" rx="4" class="wireframe-fill wireframe-stroke"/>
+  <rect x="140" y="185" width="120" height="6" rx="3" class="wireframe-fill wireframe-stroke"/>
+
+  <!-- Decorative dots -->
+  <circle cx="90" cy="60" r="3" fill="#d1d5db"/>
+  <circle cx="105" cy="60" r="3" fill="#d1d5db"/>
+  <circle cx="120" cy="60" r="3" fill="#d1d5db"/>
+</svg>
