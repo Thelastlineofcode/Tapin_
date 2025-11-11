@@ -16,10 +16,6 @@ export default function Filters({ active, onChange }) {
           </button>
         ))}
       </div>
-      <div className="view-toggle">
-        <button className="chip">List</button>
-        <button className="chip">Map</button>
-      </div>
     </div>
   );
 }

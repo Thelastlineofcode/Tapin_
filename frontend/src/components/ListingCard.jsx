@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
 
-export default function ListingCard({ listing = {}, onOpen }) {
+export default function ListingCard({ listing = {}, onOpen, onSelect }) {
   const { title, description, image_url, location, id, category } = listing;
   const [averageRating, setAverageRating] = useState(null);
   const [reviewCount, setReviewCount] = useState(0);
@@ -11,8 +12,8 @@ export default function ListingCard({ listing = {}, onOpen }) {
     async function fetchRating() {
       try {
         const [ratingRes, reviewsRes] = await Promise.all([
-          fetch(`http://127.0.0.1:5000/listings/${id}/average-rating`),
-          fetch(`http://127.0.0.1:5000/listings/${id}/reviews`),
+          fetch(`${API_URL}/listings/${id}/average-rating`),
+          fetch(`${API_URL}/listings/${id}/reviews`),
         ]);
 
         if (ratingRes.ok) {
@@ -22,7 +23,10 @@ export default function ListingCard({ listing = {}, onOpen }) {
 
         if (reviewsRes.ok) {
           const reviewsData = await reviewsRes.json();
-          setReviewCount(reviewsData.reviews?.length || 0);
+          const count = Array.isArray(reviewsData)
+            ? reviewsData.length
+            : (reviewsData?.reviews?.length || 0);
+          setReviewCount(count);
         }
       } catch (err) {
         console.error('Error fetching rating:', err);
@@ -45,7 +49,6 @@ export default function ListingCard({ listing = {}, onOpen }) {
   };
 
   return (
-    <li className="listing-item">
       <article className="card" role="article" aria-label={title || 'Listing'}>
         <div className="card-media" aria-hidden={image_url ? 'false' : 'true'}>
           {image_url ? (
@@ -88,11 +91,16 @@ export default function ListingCard({ listing = {}, onOpen }) {
         </div>
 
         <div className="card-footer">
-          <button className="btn btn-primary" onClick={() => onOpen && onOpen(listing)}>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              if (typeof onSelect === 'function') return onSelect(listing);
+              if (typeof onOpen === 'function') return onOpen(listing);
+            }}
+          >
             View Details
           </button>
         </div>
       </article>
-    </li>
   );
 }

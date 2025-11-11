@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ForgotPassword from './ForgotPassword';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
 
 export default function AuthForm({ onLogin }) {
   const [mode, setMode] = useState('login'); // 'login' or 'register'
@@ -23,15 +24,15 @@ export default function AuthForm({ onLogin }) {
 
     try {
       const endpoint = mode === 'login' ? '/login' : '/register';
-      const res = await fetch(`http://127.0.0.1:5000${endpoint}`, {
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || `HTTP ${res.status}`);
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || data.message || `HTTP ${res.status}`);
       }
 
       const data = await res.json();

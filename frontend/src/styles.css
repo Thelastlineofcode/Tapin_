@@ -506,10 +506,11 @@ textarea {
 
 .modal-card,
 .detail-card {
+  border-radius: 10px;
+  padding: 20px;
   width: 100%;
   max-width: 500px;
   background: var(--surface);
-  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
   animation: slideInUp 0.3s ease-out;
@@ -861,6 +862,7 @@ picture {
 }
 
 .auth-form button[type="submit"] {
+  padding: 200px;
   width: 100%;
   padding: var(--space-3) var(--space-5);
   margin-top: var(--space-2);

@@ -28,16 +28,26 @@ default_db = 'sqlite:///' + os.path.join(base_dir, 'data.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI', default_db)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Supabase connection pooling configuration for transaction mode (port 6543)
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_pre_ping': True,  # Verify connections before using
-    'pool_recycle': 300,    # Recycle connections every 5 minutes
-    'pool_size': 5,         # Base connection pool size
-    'max_overflow': 10,     # Allow up to 15 total connections
-    'connect_args': {
-        'connect_timeout': 10,
-        'options': '-c statement_timeout=30000'  # 30 second query timeout
-    }
+# Configure SQLAlchemy engine options; adapt connect_args by driver
+db_url = app.config['SQLALCHEMY_DATABASE_URI']
+engine_options = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'pool_size': 5,
+    'max_overflow': 10,
 }
+
+# Use PostgreSQL-specific connect args only when using psycopg2
+if isinstance(db_url, str) and db_url.lower().startswith('postgresql'):
+    engine_options['connect_args'] = {
+        'connect_timeout': 10,
+        'options': '-c statement_timeout=30000',
+    }
+elif isinstance(db_url, str) and db_url.lower().startswith('sqlite'):
+    # SQLite does not accept the above options; leave empty or set sqlite-specific options
+    engine_options['connect_args'] = {}
+
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
 # Secret key used for serializer tokens and other Flask features
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', app.config['SECRET_KEY'])
@@ -411,7 +421,31 @@ def create_listing():
         return jsonify({"error": "title required"}), 400
     # JWT identity is stored as string; convert back to int for DB foreign key
     owner_id = int(get_jwt_identity())
-    listing = Listing(title=title, description=data.get('description'), location=data.get('location'), owner_id=owner_id)
+    # Validate optional category
+    category = data.get('category')
+    allowed = ['Community', 'Environment', 'Education', 'Health', 'Animals']
+    if category and category not in allowed:
+        return jsonify({"error": "invalid category"}), 400
+
+    # Parse optional coordinates
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    try:
+        latitude = float(latitude) if latitude is not None else None
+        longitude = float(longitude) if longitude is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"error": "invalid coordinates"}), 400
+
+    listing = Listing(
+        title=title,
+        description=data.get('description'),
+        location=data.get('location'),
+        latitude=latitude,
+        longitude=longitude,
+        category=category,
+        image_url=data.get('image_url'),
+        owner_id=owner_id,
+    )
     db.session.add(listing)
     db.session.commit()
     return jsonify(listing.to_dict()), 201
@@ -435,6 +469,23 @@ def update_listing(id):
     listing.title = data.get('title', listing.title)
     listing.description = data.get('description', listing.description)
     listing.location = data.get('location', listing.location)
+    # Optional fields
+    if 'category' in data:
+        category = data.get('category')
+        allowed = ['Community', 'Environment', 'Education', 'Health', 'Animals']
+        if category and category not in allowed:
+            return jsonify({"error": "invalid category"}), 400
+        listing.category = category
+    if 'image_url' in data:
+        listing.image_url = data.get('image_url')
+    if 'latitude' in data or 'longitude' in data:
+        try:
+            if 'latitude' in data:
+                listing.latitude = float(data.get('latitude')) if data.get('latitude') is not None else None
+            if 'longitude' in data:
+                listing.longitude = float(data.get('longitude')) if data.get('longitude') is not None else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid coordinates"}), 400
     db.session.commit()
     return jsonify(listing.to_dict())
 

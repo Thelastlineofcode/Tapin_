@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
 
 export default function CreateListingForm({ token, onCreated }) {
   const [title, setTitle] = useState('');
@@ -6,6 +7,8 @@ export default function CreateListingForm({ token, onCreated }) {
   const [location, setLocation] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
+  const [category, setCategory] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [error, setError] = useState(null);
 
   async function submit(e) {
@@ -20,13 +23,17 @@ export default function CreateListingForm({ token, onCreated }) {
         body.longitude = parseFloat(longitude);
       }
 
-      const res = await fetch('http://127.0.0.1:5000/listings', {
+      const res = await fetch(`${API_URL}/listings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          ...(category ? { category } : {}),
+          ...(imageUrl ? { image_url: imageUrl } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'create failed');
@@ -35,6 +42,8 @@ export default function CreateListingForm({ token, onCreated }) {
       setLocation('');
       setLatitude('');
       setLongitude('');
+      setCategory('');
+      setImageUrl('');
       onCreated && onCreated(data);
     } catch (error_) {
       setError(error_.message);
@@ -59,6 +68,28 @@ export default function CreateListingForm({ token, onCreated }) {
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description"
       />
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          aria-label="Category"
+          style={{ flex: 1 }}
+        >
+          <option value="">Select category (optional)</option>
+          <option value="Community">Community</option>
+          <option value="Environment">Environment</option>
+          <option value="Education">Education</option>
+          <option value="Health">Health</option>
+          <option value="Animals">Animals</option>
+        </select>
+        <input
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="Image URL (optional)"
+          style={{ flex: 2 }}
+        />
+      </div>
 
       <div style={{ marginTop: '12px' }}>
         <details>

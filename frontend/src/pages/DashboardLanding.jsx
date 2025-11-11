@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import logoTransparent from '../../../Design-Assets/brand/logo-transparent.svg';
 import AuthForm from '../components/AuthForm';
 
-export default function DashboardLanding({ onLogin }) {
+export default function DashboardLanding({ onLogin, onEnter }) {
   const [showAuth, setShowAuth] = useState(false);
 
   if (showAuth) {
@@ -13,8 +13,21 @@ export default function DashboardLanding({ onLogin }) {
           <h2 style={{ marginBottom: '24px', color: '#333' }}>Welcome to TapIn</h2>
 
           <AuthForm
-            onSuccess={(user, token) => {
-              onLogin(user, token);
+            onLogin={(data) => {
+              try {
+                // Prefer tokens from response
+                if (data?.access_token) {
+                  localStorage.setItem('access_token', data.access_token);
+                }
+              } catch {}
+              // Notify parent if provided
+              if (typeof onLogin === 'function') {
+                const user = data?.user || null;
+                const token = data?.access_token || null;
+                onLogin(user, token);
+              }
+              setShowAuth(false);
+              if (typeof onEnter === 'function') onEnter();
             }}
           />
 

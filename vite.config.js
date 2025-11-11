@@ -9,15 +9,7 @@ export default defineConfig({
     root: '.', // Keep root at project root
     publicDir: 'frontend/src/assets', // Public assets from frontend
     server: {
-        port: 3000,
-        proxy: {
-            // Proxy API requests to Flask backend
-            '/api': {
-                target: 'http://localhost:5001',
-                changeOrigin: true,
-                secure: false,
-            }
-        }
+        port: 3000
     },
     build: {
         outDir: 'dist',

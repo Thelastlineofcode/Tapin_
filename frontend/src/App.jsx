@@ -9,6 +9,7 @@ import CreateListingForm from './components/CreateListingForm';
 import DashboardLanding from './pages/DashboardLanding';
 import MapView from './components/MapView';
 import LocationSelector from './components/LocationSelector';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
 
 export default function App() {
   const [listings, setListings] = useState([]);
@@ -30,7 +31,7 @@ export default function App() {
     try {
       const params = new URLSearchParams();
       if (filter && filter !== 'All') params.set('q', filter);
-      const url = `http://127.0.0.1:5000/listings${params.toString() ? `?${params.toString()}` : ''}`;
+      const url = `${API_URL}/listings${params.toString() ? `?${params.toString()}` : ''}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = await res.json();
@@ -54,7 +55,7 @@ export default function App() {
     async function fetchMe() {
       if (!token) return setUser(null);
       try {
-        const res = await fetch('http://127.0.0.1:5000/me', {
+        const res = await fetch(`${API_URL}/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -104,40 +105,43 @@ export default function App() {
   if (showLanding && !token) {
     return (
       <div className="app-root">
-        <Header />
-        <DashboardLanding onEnter={() => setShowLanding(false)} />
+        <Header user={user} onLogout={() => { localStorage.removeItem('access_token'); setToken(null); setUser(null); }} />
+        <DashboardLanding
+          onEnter={() => setShowLanding(false)}
+          onLogin={(_user, accessToken) => {
+            if (accessToken) {
+              localStorage.setItem('access_token', accessToken);
+              setToken(accessToken);
+            }
+            setShowLanding(false);
+          }}
+        />
       </div>
     );
   }
 
   return (
     <div className="app-root">
-      <Header />
+      <Header
+        user={user}
+        onLogout={() => {
+          localStorage.removeItem('access_token');
+          setToken(null);
+          setUser(null);
+        }}
+      />
 
       <div className="top-section">
-        <div className="auth-section">
-          {user ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span>Hi, {user.email}</span>
-              <button
-                className="chip"
-                onClick={() => {
-                  localStorage.removeItem('access_token');
-                  setToken(null);
-                }}
-              >
-                Logout
-              </button>
-            </div>
-          ) : (
+        {!user && (
+          <div className="auth-section">
             <AuthForm
               onLogin={(d) => {
                 localStorage.setItem('access_token', d.access_token);
                 setToken(d.access_token);
               }}
             />
-          )}
-        </div>
+          </div>
+        )}
 
         <Filters active={activeFilter} onChange={handleFilterChange} />
       </div>
