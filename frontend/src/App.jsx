@@ -1,27 +1,109 @@
-import React, { useEffect, useState } from 'react';
-import Header from './components/Header';
-import ListingCard from './components/ListingCard';
-import EmptyState from './components/EmptyState';
-import ListingDetail from './components/ListingDetail';
-import Filters from './components/Filters';
-import AuthForm from './components/AuthForm';
-import CreateListingForm from './components/CreateListingForm';
-import DashboardLanding from './pages/DashboardLanding';
-import MapView from './components/MapView';
-import LocationSelector from './components/LocationSelector';
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+function HoustonEvents() {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    async function fetchEvents() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`${API_URL}/api/events/houston`);
+        if (!res.ok) throw new Error(`status ${res.status}`);
+        const data = await res.json();
+        setEvents(data.events || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchEvents();
+  }, []);
+
+  if (loading) return <p>Loading Houston events…</p>;
+  if (error) return <p className="error">Houston events error: {error}</p>;
+  if (!events.length) return <p>No public events found in Houston.</p>;
+  return (
+    <section style={{ marginTop: 32 }}>
+      <h2>🎉 Houston Public Events</h2>
+      <ul className="houston-events-list">
+        {events.map((ev) => (
+          <li
+            key={ev.id}
+            style={{
+              marginBottom: 16,
+              borderBottom: "1px solid #eee",
+              paddingBottom: 8,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center" }}>
+              {ev.logo && (
+                <img
+                  src={ev.logo}
+                  alt="event logo"
+                  style={{
+                    width: 60,
+                    height: 60,
+                    objectFit: "cover",
+                    marginRight: 12,
+                    borderRadius: 8,
+                  }}
+                />
+              )}
+              <div>
+                <a
+                  href={ev.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontWeight: "bold", fontSize: 18 }}
+                >
+                  {ev.name}
+                </a>
+                <div style={{ fontSize: 14, color: "#555" }}>
+                  {ev.start ? new Date(ev.start).toLocaleString() : ""}
+                </div>
+                <div style={{ fontSize: 14, color: "#777" }}>{ev.venue}</div>
+              </div>
+            </div>
+            {ev.description && (
+              <div style={{ marginTop: 6, fontSize: 13, color: "#444" }}>
+                {ev.description.slice(0, 180)}
+                {ev.description.length > 180 ? "…" : ""}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+import React, { useEffect, useState } from "react";
+import Header from "./components/Header";
+import ListingCard from "./components/ListingCard";
+import EmptyState from "./components/EmptyState";
+import ListingDetail from "./components/ListingDetail";
+import Filters from "./components/Filters";
+import AuthForm from "./components/AuthForm";
+import CreateListingForm from "./components/CreateListingForm";
+import DashboardLanding from "./pages/DashboardLanding";
+import MapView from "./components/MapView";
+import LocationSelector from "./components/LocationSelector";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 export default function App() {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [activeFilter, setActiveFilter] = useState('All');
-  const [token, setToken] = useState(localStorage.getItem('access_token') || null);
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [token, setToken] = useState(
+    localStorage.getItem("access_token") || null
+  );
   // Show the marketing-style landing page when there's no token (mobile-first)
   const [showLanding, setShowLanding] = useState(!token);
   const [user, setUser] = useState(null);
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'map'
+  const [viewMode, setViewMode] = useState("list"); // 'list' or 'map'
   const [userLocation, setUserLocation] = useState(null); // Store user's selected location
 
   // Helper: fetch listings optionally filtered by q
@@ -30,8 +112,8 @@ export default function App() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (filter && filter !== 'All') params.set('q', filter);
-      const url = `${API_URL}/listings${params.toString() ? `?${params.toString()}` : ''}`;
+      if (filter && filter !== "All") params.set("q", filter);
+      const url = `${API_URL}/listings${params.toString() ? `?${params.toString()}` : ""}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = await res.json();
@@ -46,7 +128,7 @@ export default function App() {
   // Initialize filter from URL and fetch
   useEffect(() => {
     const params = new URLSearchParams(globalThis.location.search);
-    const q = params.get('q') || 'All';
+    const q = params.get("q") || "All";
     setActiveFilter(q);
     fetchListings(q);
   }, []);
@@ -78,11 +160,11 @@ export default function App() {
   function handleFilterChange(filter) {
     setActiveFilter(filter);
     const params = new URLSearchParams(globalThis.location.search);
-    if (!filter || filter === 'All') params.delete('q');
-    else params.set('q', filter);
+    if (!filter || filter === "All") params.delete("q");
+    else params.set("q", filter);
     const qs = params.toString();
     const newUrl = qs ? `?${qs}` : globalThis.location.pathname;
-    globalThis.history.replaceState(null, '', newUrl);
+    globalThis.history.replaceState(null, "", newUrl);
     fetchListings(filter);
   }
 
@@ -94,7 +176,7 @@ export default function App() {
             <div className="skeleton-card">
               <div className="skeleton-title" />
               <div className="skeleton-line" />
-              <div className="skeleton-line" style={{ width: '80%' }} />
+              <div className="skeleton-line" style={{ width: "80%" }} />
             </div>
           </li>
         ))}
@@ -105,12 +187,19 @@ export default function App() {
   if (showLanding && !token) {
     return (
       <div className="app-root">
-        <Header user={user} onLogout={() => { localStorage.removeItem('access_token'); setToken(null); setUser(null); }} />
+        <Header
+          user={user}
+          onLogout={() => {
+            localStorage.removeItem("access_token");
+            setToken(null);
+            setUser(null);
+          }}
+        />
         <DashboardLanding
           onEnter={() => setShowLanding(false)}
           onLogin={(_user, accessToken) => {
             if (accessToken) {
-              localStorage.setItem('access_token', accessToken);
+              localStorage.setItem("access_token", accessToken);
               setToken(accessToken);
             }
             setShowLanding(false);
@@ -125,7 +214,7 @@ export default function App() {
       <Header
         user={user}
         onLogout={() => {
-          localStorage.removeItem('access_token');
+          localStorage.removeItem("access_token");
           setToken(null);
           setUser(null);
         }}
@@ -136,7 +225,7 @@ export default function App() {
           <div className="auth-section">
             <AuthForm
               onLogin={(d) => {
-                localStorage.setItem('access_token', d.access_token);
+                localStorage.setItem("access_token", d.access_token);
                 setToken(d.access_token);
               }}
             />
@@ -147,34 +236,35 @@ export default function App() {
       </div>
 
       <main>
+        <HoustonEvents />
         {/* View Mode Toggle */}
         {!loading && !error && listings.length > 0 && (
-          <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <div style={{ marginBottom: "20px", textAlign: "center" }}>
             <button
-              onClick={() => setViewMode('list')}
+              onClick={() => setViewMode("list")}
               style={{
-                padding: '8px 16px',
-                background: viewMode === 'list' ? '#007bff' : '#fff',
-                color: viewMode === 'list' ? '#fff' : '#333',
-                border: '1px solid #007bff',
-                borderRadius: '4px 0 0 4px',
-                cursor: 'pointer',
-                fontWeight: viewMode === 'list' ? 'bold' : 'normal',
+                padding: "8px 16px",
+                background: viewMode === "list" ? "#007bff" : "#fff",
+                color: viewMode === "list" ? "#fff" : "#333",
+                border: "1px solid #007bff",
+                borderRadius: "4px 0 0 4px",
+                cursor: "pointer",
+                fontWeight: viewMode === "list" ? "bold" : "normal",
               }}
             >
               📋 List
             </button>
             <button
-              onClick={() => setViewMode('map')}
+              onClick={() => setViewMode("map")}
               style={{
-                padding: '8px 16px',
-                background: viewMode === 'map' ? '#007bff' : '#fff',
-                color: viewMode === 'map' ? '#fff' : '#333',
-                border: '1px solid #007bff',
-                borderLeft: 'none',
-                borderRadius: '0 4px 4px 0',
-                cursor: 'pointer',
-                fontWeight: viewMode === 'map' ? 'bold' : 'normal',
+                padding: "8px 16px",
+                background: viewMode === "map" ? "#007bff" : "#fff",
+                color: viewMode === "map" ? "#fff" : "#333",
+                border: "1px solid #007bff",
+                borderLeft: "none",
+                borderRadius: "0 4px 4px 0",
+                cursor: "pointer",
+                fontWeight: viewMode === "map" ? "bold" : "normal",
               }}
             >
               🗺️ Map
@@ -189,7 +279,7 @@ export default function App() {
           <section>
             {listings.length === 0 ? (
               <EmptyState />
-            ) : viewMode === 'list' ? (
+            ) : viewMode === "list" ? (
               <ul className="listings">
                 {listings.map((l) => (
                   <li key={l.id} className="listing-item">
@@ -198,7 +288,11 @@ export default function App() {
                 ))}
               </ul>
             ) : userLocation ? (
-              <MapView listings={listings} onListingClick={handleSelect} userLocation={userLocation} />
+              <MapView
+                listings={listings}
+                onListingClick={handleSelect}
+                userLocation={userLocation}
+              />
             ) : (
               <LocationSelector onLocationSelected={setUserLocation} />
             )}

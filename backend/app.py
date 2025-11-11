@@ -1,3 +1,40 @@
+import requests
+@app.route('/api/events/houston', methods=['GET'])
+def get_houston_events():
+    """Fetch public events in Houston from Eventbrite API and return simplified list."""
+    EB_TOKEN = "FTSRQEL37DD3UV6O6C"  # Provided Eventbrite API key
+    url = "https://www.eventbriteapi.com/v3/events/search/"
+    params = {
+        "location.address": "Houston, TX",
+        "location.within": "25mi",
+        "expand": "venue",
+        "sort_by": "date",
+        "page": request.args.get("page", 1),
+        "categories": request.args.get("categories"),  # Optional: allow category filter
+        "q": request.args.get("q"),  # Optional: allow search
+    }
+    # Remove None values
+    params = {k: v for k, v in params.items() if v}
+    headers = {"Authorization": f"Bearer {EB_TOKEN}"}
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        events = []
+        for e in data.get("events", []):
+            events.append({
+                "id": e.get("id"),
+                "name": e.get("name", {}).get("text"),
+                "description": e.get("description", {}).get("text"),
+                "start": e.get("start", {}).get("local"),
+                "end": e.get("end", {}).get("local"),
+                "url": e.get("url"),
+                "venue": e.get("venue", {}).get("address", {}).get("localized_address_display"),
+                "logo": e.get("logo", {}).get("url"),
+            })
+        return jsonify({"events": events, "pagination": data.get("pagination", {})})
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 502
 from flask import Flask, request, jsonify, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
