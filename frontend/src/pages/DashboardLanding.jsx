@@ -1,23 +1,58 @@
-import React from 'react';
+import React, { useState } from 'react';
 import logoTransparent from '../../../Design-Assets/brand/logo-transparent.svg';
+import AuthForm from '../components/AuthForm';
 
-export default function DashboardLanding({ onEnter }) {
+export default function DashboardLanding({ onLogin }) {
+  const [showAuth, setShowAuth] = useState(false);
+
+  if (showAuth) {
+    return (
+      <div className="landing-root">
+        <div className="landing-hero" style={{ maxWidth: '500px' }}>
+          <img src={logoTransparent} alt="Tapin logo" className="landing-logo" />
+          <h2 style={{ marginBottom: '24px', color: '#333' }}>Welcome to TapIn</h2>
+
+          <AuthForm
+            onSuccess={(user, token) => {
+              onLogin(user, token);
+            }}
+          />
+
+          <button
+            onClick={() => setShowAuth(false)}
+            style={{
+              marginTop: '16px',
+              background: 'none',
+              border: 'none',
+              color: '#666',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              fontSize: '14px'
+            }}
+          >
+            ← Back to home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="landing-root">
       <div className="landing-hero">
         <img src={logoTransparent} alt="Tapin logo" className="landing-logo" />
-        <h1 className="landing-title">Tapin — connect your community</h1>
+        <h1 className="landing-title">TapIn — connect your community</h1>
         <p className="landing-sub">
           Find volunteer opportunities to give back, or discover local services from small
           businesses and professionals. One platform to strengthen your community.
         </p>
 
         <div className="landing-cta-row">
-          <button className="btn btn-primary landing-cta" onClick={onEnter}>
-            Explore opportunities
+          <button className="btn btn-primary landing-cta" onClick={() => setShowAuth(true)}>
+            Get Started
           </button>
-          <button className="btn btn-outline landing-cta" onClick={onEnter}>
-            Log in
+          <button className="btn btn-outline landing-cta" onClick={() => setShowAuth(true)}>
+            Log In
           </button>
         </div>
 
