@@ -1,40 +1,6 @@
 import requests
-@app.route('/api/events/houston', methods=['GET'])
-def get_houston_events():
-    """Fetch public events in Houston from Eventbrite API and return simplified list."""
-    EB_TOKEN = "FTSRQEL37DD3UV6O6C"  # Provided Eventbrite API key
-    url = "https://www.eventbriteapi.com/v3/events/search/"
-    params = {
-        "location.address": "Houston, TX",
-        "location.within": "25mi",
-        "expand": "venue",
-        "sort_by": "date",
-        "page": request.args.get("page", 1),
-        "categories": request.args.get("categories"),  # Optional: allow category filter
-        "q": request.args.get("q"),  # Optional: allow search
-    }
-    # Remove None values
-    params = {k: v for k, v in params.items() if v}
-    headers = {"Authorization": f"Bearer {EB_TOKEN}"}
-    try:
-        resp = requests.get(url, params=params, headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        events = []
-        for e in data.get("events", []):
-            events.append({
-                "id": e.get("id"),
-                "name": e.get("name", {}).get("text"),
-                "description": e.get("description", {}).get("text"),
-                "start": e.get("start", {}).get("local"),
-                "end": e.get("end", {}).get("local"),
-                "url": e.get("url"),
-                "venue": e.get("venue", {}).get("address", {}).get("localized_address_display"),
-                "logo": e.get("logo", {}).get("url"),
-            })
-        return jsonify({"events": events, "pagination": data.get("pagination", {})})
-    except Exception as ex:
-        return jsonify({"error": str(ex)}), 502
+# Eventbrite Houston endpoint moved below after app initialization to ensure
+# Flask `app`, `request` and `jsonify` are available when the route is defined.
 from flask import Flask, request, jsonify, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -675,15 +641,56 @@ def get_listing_average_rating(id):
     """Get average rating for a listing."""
     listing = Listing.query.get_or_404(id)
     reviews = Review.query.filter_by(listing_id=id).all()
-    
+
     if not reviews:
         return jsonify({"average_rating": 0, "review_count": 0})
-    
+
     avg_rating = sum(r.rating for r in reviews) / len(reviews)
     return jsonify({
         "average_rating": round(avg_rating, 1),
         "review_count": len(reviews)
     })
+
+
+@app.route('/api/events/houston', methods=['GET'])
+def get_houston_events():
+    """Fetch public events in Houston from Eventbrite API and return simplified list."""
+    eb_token = os.environ.get('EVENTBRITE_API_KEY')
+    if not eb_token:
+        return jsonify({"error": "Eventbrite API key not configured"}), 500
+
+    url = "https://www.eventbriteapi.com/v3/events/search/"
+    params = {
+        "location.address": "Houston, TX",
+        "location.within": "25mi",
+        "expand": "venue",
+        "sort_by": "date",
+        "page": request.args.get("page", 1),
+        "categories": request.args.get("categories"),  # Optional: allow category filter
+        "q": request.args.get("q"),  # Optional: allow search
+    }
+    # Remove None values
+    params = {k: v for k, v in params.items() if v}
+    headers = {"Authorization": f"Bearer {eb_token}"}
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        events = []
+        for e in data.get("events", []):
+            events.append({
+                "id": e.get("id"),
+                "name": e.get("name", {}).get("text"),
+                "description": e.get("description", {}).get("text"),
+                "start": e.get("start", {}).get("local"),
+                "end": e.get("end", {}).get("local"),
+                "url": e.get("url"),
+                "venue": e.get("venue", {}).get("address", {}).get("localized_address_display"),
+                "logo": e.get("logo", {}).get("url"),
+            })
+        return jsonify({"events": events, "pagination": data.get("pagination", {})})
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 502
 
 
 if __name__ == '__main__':

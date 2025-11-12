@@ -30,6 +30,7 @@ dist-ssr
 
 # track this file .gitignore (i.e. do NOT ignore it)
 !.gitignore
+!.env.example
 !.gitpod.yml
 !.devcontainer
 !.github
