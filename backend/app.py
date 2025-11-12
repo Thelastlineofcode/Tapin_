@@ -774,10 +774,14 @@ def get_seatgeek_events():
 @app.route('/api/events/all', methods=['GET'])
 def get_all_events():
     """Aggregate events from all configured sources (Ticketmaster + SeatGeek)."""
+    from datetime import datetime as dt
     all_events = []
     errors = []
     city = request.args.get("city", "Houston")
     state = request.args.get("state", "TX")
+
+    # Get current datetime for filtering
+    now = dt.now()
 
     # Try Ticketmaster
     tm_key = os.environ.get('TICKETMASTER_API_KEY')
@@ -796,11 +800,22 @@ def get_all_events():
             data = resp.json()
             for e in data.get("_embedded", {}).get("events", []):
                 venue_info = e.get("_embedded", {}).get("venues", [{}])[0]
+                event_date = e.get("dates", {}).get("start", {}).get("localDate")
+
+                # Skip past events
+                if event_date:
+                    try:
+                        event_datetime = dt.fromisoformat(event_date)
+                        if event_datetime.date() < now.date():
+                            continue
+                    except (ValueError, AttributeError):
+                        pass  # Include event if date parsing fails
+
                 all_events.append({
                     "id": f"tm_{e.get('id')}",
                     "source": "ticketmaster",
                     "name": e.get("name"),
-                    "start": e.get("dates", {}).get("start", {}).get("localDate"),
+                    "start": event_date,
                     "start_time": e.get("dates", {}).get("start", {}).get("localTime"),
                     "url": e.get("url"),
                     "venue": venue_info.get("name"),
@@ -826,11 +841,22 @@ def get_all_events():
             data = resp.json()
             for e in data.get("events", []):
                 venue = e.get("venue", {})
+                event_datetime_str = e.get("datetime_local")
+
+                # Skip past events
+                if event_datetime_str:
+                    try:
+                        event_datetime = dt.fromisoformat(event_datetime_str.replace('Z', '+00:00'))
+                        if event_datetime < now:
+                            continue
+                    except (ValueError, AttributeError):
+                        pass  # Include event if date parsing fails
+
                 all_events.append({
                     "id": f"sg_{e.get('id')}",
                     "source": "seatgeek",
                     "name": e.get("title"),
-                    "start": e.get("datetime_local"),
+                    "start": event_datetime_str,
                     "url": e.get("url"),
                     "venue": venue.get("name"),
                     "image": e.get("performers", [{}])[0].get("image") if e.get("performers") else None,
@@ -852,8 +878,315 @@ def get_all_events():
         "total": len(all_events),
         "errors": errors if errors else None,
         "sources_queried": sources,
-        "note": "Combining events from multiple sources"
+        "note": "Showing upcoming events only"
     })
+
+
+@app.route('/api/events/community', methods=['GET'])
+def get_community_events():
+    """Fetch community events using SerpApi Google Search."""
+    serpapi_key = os.environ.get('SERPAPI_KEY')
+    if not serpapi_key:
+        return jsonify({"error": "SerpApi key not configured"}), 500
+
+    try:
+        from datetime import datetime as dt
+
+        city = request.args.get("city", "Houston")
+        state = request.args.get("state", "TX")
+
+        # Search for community events using Google
+        url = "https://serpapi.com/search.json"
+
+        params = {
+            "engine": "google",
+            "q": f"community events {city} {state}",
+            "location": f"{city}, {state}, United States",
+            "tbm": "nws",  # News search for events
+            "api_key": serpapi_key
+        }
+
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+
+        events = []
+        now = dt.now()
+
+        # Parse news results for events
+        for item in data.get("news_results", [])[:20]:
+            # Extract date if available
+            date_str = item.get("date", "")
+
+            events.append({
+                "id": f"serp_{hash(item.get('link', ''))}",
+                "source": "community",
+                "name": item.get("title"),
+                "start": date_str,
+                "url": item.get("link"),
+                "venue": f"{city}, {state}",
+                "description": item.get("snippet", "")[:200],
+                "image": item.get("thumbnail"),
+                "category": "community"
+            })
+
+        return jsonify({
+            "events": events,
+            "total": len(events),
+            "source": "serpapi",
+            "note": "Community events powered by Google Search"
+        })
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": f"SerpApi error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Error processing community events: {str(e)}"}), 500
+
+
+@app.route('/api/agent/populate-listings', methods=['POST'])
+def populate_listings_from_events():
+    """AI agent to auto-populate listings from event APIs for future events only."""
+    try:
+        from datetime import datetime as dt
+
+        # Category mapping: event categories to listing categories
+        category_map = {
+            'music': 'Community',
+            'sports': 'Community',
+            'arts': 'Community',
+            'theater': 'Community',
+            'family': 'Community',
+            'community': 'Community'
+        }
+
+        # Get all future events from Ticketmaster
+        tm_key = os.environ.get('TICKETMASTER_API_KEY')
+        sg_client_id = os.environ.get('SEATGEEK_CLIENT_ID')
+
+        created_listings = []
+        skipped_events = []
+        now = dt.now()
+
+        # Fetch from Ticketmaster (multiple categories)
+        if tm_key:
+            for event_category in ['music', 'sports', 'arts', 'family']:
+                try:
+                    url = "https://app.ticketmaster.com/discovery/v2/events"
+                    params = {
+                        "apikey": tm_key,
+                        "city": "Houston",
+                        "stateCode": "TX",
+                        "classificationName": event_category,
+                        "size": 10,
+                        "sort": "date,asc"
+                    }
+
+                    response = requests.get(url, params=params, timeout=10)
+                    if response.ok:
+                        data = response.json()
+                        events = data.get("_embedded", {}).get("events", [])
+
+                        for e in events:
+                            # Parse event date
+                            start_date_str = e.get("dates", {}).get("start", {}).get("dateTime") or e.get("dates", {}).get("start", {}).get("localDate")
+                            if not start_date_str:
+                                continue
+
+                            # Skip past events
+                            try:
+                                event_date = dt.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                                if event_date.date() < now.date():
+                                    skipped_events.append(e.get("name"))
+                                    continue
+                            except:
+                                pass  # Include if date parsing fails
+
+                            # Check if listing already exists
+                            event_url = e.get("url", "")
+                            existing = Listing.query.filter_by(description=f"Event URL: {event_url}").first()
+                            if existing:
+                                continue
+
+                            # Extract venue info
+                            venue = e.get("_embedded", {}).get("venues", [{}])[0]
+                            venue_name = venue.get("name", "Houston, TX")
+                            lat = venue.get("location", {}).get("latitude")
+                            lon = venue.get("location", {}).get("longitude")
+
+                            # Create listing from event
+                            listing = Listing(
+                                title=e.get("name", "Event")[:200],
+                                description=f"Event URL: {event_url}\n\nDate: {start_date_str}\n\nJoin this {event_category} event in Houston!",
+                                location=venue_name,
+                                latitude=float(lat) if lat else None,
+                                longitude=float(lon) if lon else None,
+                                category=category_map.get(event_category, 'Community'),
+                                image_url=e.get("images", [{}])[0].get("url") if e.get("images") else None,
+                                owner_id=None  # System-generated listing
+                            )
+
+                            db.session.add(listing)
+                            created_listings.append(listing.title)
+
+                except Exception as ex:
+                    print(f"Error fetching {event_category} events: {ex}")
+                    continue
+
+        # Commit all new listings
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "created": len(created_listings),
+            "skipped_past_events": len(skipped_events),
+            "sample_created": created_listings[:5],
+            "message": f"Successfully created {len(created_listings)} listings from future events"
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Agent error: {str(e)}"}), 500
+
+
+@app.route('/api/agent/ai-populate', methods=['POST'])
+def ai_populate_listings():
+    """AI-powered agent using Gemini to intelligently populate categories with image-rich events."""
+    try:
+        import google.generativeai as genai
+        from datetime import datetime as dt
+
+        gemini_key = os.environ.get('GEMINI_API_KEY')
+        if not gemini_key:
+            return jsonify({"error": "Gemini API key not configured"}), 500
+
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        # Analyze current listings by category
+        all_listings = Listing.query.all()
+        category_counts = {}
+        for listing in all_listings:
+            cat = listing.category or 'Uncategorized'
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+
+        # Ask Gemini which categories need more events
+        prompt = f"""Analyze these event category counts and suggest which 3 categories need more diversity:
+Categories: {category_counts}
+
+Available event types: music concerts, sports games, theater shows, art exhibitions, family activities, community gatherings.
+
+Respond with ONLY a JSON array of 3 category names to prioritize, like: ["music", "sports", "family"]"""
+
+        response = model.generate_content(prompt)
+        import json
+        try:
+            priority_categories = json.loads(response.text.strip())
+        except:
+            # Fallback if AI doesn't return valid JSON
+            priority_categories = ["music", "sports", "family"]
+
+        # Fetch events from priority categories (only with images)
+        tm_key = os.environ.get('TICKETMASTER_API_KEY')
+        created_listings = []
+        now = dt.now()
+
+        if tm_key:
+            for event_category in priority_categories[:3]:  # Top 3 priorities
+                try:
+                    url = "https://app.ticketmaster.com/discovery/v2/events"
+                    params = {
+                        "apikey": tm_key,
+                        "city": "Houston",
+                        "stateCode": "TX",
+                        "classificationName": event_category,
+                        "size": 15,
+                        "sort": "date,asc"
+                    }
+
+                    response_events = requests.get(url, params=params, timeout=10)
+                    if response_events.ok:
+                        data = response_events.json()
+                        events = data.get("_embedded", {}).get("events", [])
+
+                        for e in events:
+                            # ONLY process events with images
+                            if not e.get("images"):
+                                continue
+
+                            # Skip past events
+                            start_date_str = e.get("dates", {}).get("start", {}).get("dateTime") or e.get("dates", {}).get("start", {}).get("localDate")
+                            if start_date_str:
+                                try:
+                                    event_date = dt.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                                    if event_date.date() < now.date():
+                                        continue
+                                except:
+                                    pass
+
+                            # Check if already exists
+                            event_url = e.get("url", "")
+                            existing = Listing.query.filter_by(description=f"Event URL: {event_url}").first()
+                            if existing:
+                                continue
+
+                            # Use Gemini to generate engaging description
+                            event_name = e.get("name", "Event")
+                            desc_prompt = f"Write a short, engaging 2-sentence description for this event: {event_name}. Make it exciting and community-focused."
+
+                            try:
+                                desc_response = model.generate_content(desc_prompt)
+                                ai_description = desc_response.text.strip()
+                            except:
+                                ai_description = f"Join this {event_category} event in Houston!"
+
+                            # Extract venue
+                            venue = e.get("_embedded", {}).get("venues", [{}])[0]
+                            venue_name = venue.get("name", "Houston, TX")
+                            lat = venue.get("location", {}).get("latitude")
+                            lon = venue.get("location", {}).get("longitude")
+
+                            # Get best quality image
+                            images = e.get("images", [])
+                            best_image = max(images, key=lambda img: img.get("width", 0) * img.get("height", 0))
+
+                            listing = Listing(
+                                title=event_name[:200],
+                                description=f"{ai_description}\n\nEvent URL: {event_url}\nDate: {start_date_str}",
+                                location=venue_name,
+                                latitude=float(lat) if lat else None,
+                                longitude=float(lon) if lon else None,
+                                category="Community",
+                                image_url=best_image.get("url"),
+                                owner_id=None
+                            )
+
+                            db.session.add(listing)
+                            created_listings.append(listing.title)
+
+                            # Limit to 5 per category
+                            if len([l for l in created_listings if event_category in l.lower()]) >= 5:
+                                break
+
+                except Exception as ex:
+                    print(f"Error in AI agent for {event_category}: {ex}")
+                    continue
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "ai_analysis": {
+                "current_counts": category_counts,
+                "prioritized": priority_categories
+            },
+            "created": len(created_listings),
+            "listings": created_listings[:10],
+            "message": f"AI agent created {len(created_listings)} image-rich listings in priority categories"
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"AI Agent error: {str(e)}"}), 500
 
 
 if __name__ == '__main__':

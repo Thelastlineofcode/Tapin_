@@ -1,83 +1,3 @@
-function HoustonEvents() {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    async function fetchEvents() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${API_URL}/api/events/houston`);
-        if (!res.ok) throw new Error(`status ${res.status}`);
-        const data = await res.json();
-        setEvents(data.events || []);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchEvents();
-  }, []);
-
-  if (loading) return <p>Loading Houston events…</p>;
-  if (error) return <p className="error">Houston events error: {error}</p>;
-  if (!events.length) return <p>No public events found in Houston.</p>;
-  return (
-    <section style={{ marginTop: 32 }}>
-      <h2>🎉 Houston Public Events</h2>
-      <ul className="houston-events-list">
-        {events.map((ev) => (
-          <li
-            key={ev.id}
-            style={{
-              marginBottom: 16,
-              borderBottom: "1px solid #eee",
-              paddingBottom: 8,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center" }}>
-              {ev.logo && (
-                <img
-                  src={ev.logo}
-                  alt="event logo"
-                  style={{
-                    width: 60,
-                    height: 60,
-                    objectFit: "cover",
-                    marginRight: 12,
-                    borderRadius: 8,
-                  }}
-                />
-              )}
-              <div>
-                <a
-                  href={ev.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ fontWeight: "bold", fontSize: 18 }}
-                >
-                  {ev.name}
-                </a>
-                <div style={{ fontSize: 14, color: "#555" }}>
-                  {ev.start ? new Date(ev.start).toLocaleString() : ""}
-                </div>
-                <div style={{ fontSize: 14, color: "#777" }}>{ev.venue}</div>
-              </div>
-            </div>
-            {ev.description && (
-              <div style={{ marginTop: 6, fontSize: 13, color: "#444" }}>
-                {ev.description.slice(0, 180)}
-                {ev.description.length > 180 ? "…" : ""}
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
 import React, { useEffect, useState } from "react";
 import Header from "./components/Header";
 import ListingCard from "./components/ListingCard";
@@ -89,6 +9,7 @@ import CreateListingForm from "./components/CreateListingForm";
 import DashboardLanding from "./pages/DashboardLanding";
 import MapView from "./components/MapView";
 import LocationSelector from "./components/LocationSelector";
+import EventsByCategory from "./components/EventsByCategory";
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 export default function App() {
@@ -236,7 +157,7 @@ export default function App() {
       </div>
 
       <main>
-        <HoustonEvents />
+        <EventsByCategory />
         {/* View Mode Toggle */}
         {!loading && !error && listings.length > 0 && (
           <div style={{ marginBottom: "20px", textAlign: "center" }}>
