@@ -654,44 +654,16 @@ def get_listing_average_rating(id):
 
 @app.route('/api/events/eventbrite', methods=['GET'])
 def get_eventbrite_events():
-    """Fetch public events from Eventbrite API."""
-    eb_token = os.environ.get('EVENTBRITE_API_KEY')
-    if not eb_token:
-        return jsonify({"error": "Eventbrite API key not configured"}), 500
-
-    url = "https://www.eventbriteapi.com/v3/events/search/"
-    location = request.args.get("location", "Houston, TX")
-    params = {
-        "location.address": location,
-        "location.within": request.args.get("radius", "25mi"),
-        "expand": "venue",
-        "sort_by": "date",
-        "page": request.args.get("page", 1),
-        "categories": request.args.get("categories"),
-        "q": request.args.get("q"),
-    }
-    params = {k: v for k, v in params.items() if v}
-    headers = {"Authorization": f"Bearer {eb_token}"}
-    try:
-        resp = requests.get(url, params=params, headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        events = []
-        for e in data.get("events", []):
-            events.append({
-                "id": e.get("id"),
-                "source": "eventbrite",
-                "name": e.get("name", {}).get("text"),
-                "description": e.get("description", {}).get("text"),
-                "start": e.get("start", {}).get("local"),
-                "end": e.get("end", {}).get("local"),
-                "url": e.get("url"),
-                "venue": e.get("venue", {}).get("address", {}).get("localized_address_display"),
-                "image": e.get("logo", {}).get("url"),
-            })
-        return jsonify({"events": events, "pagination": data.get("pagination", {})})
-    except Exception as ex:
-        return jsonify({"error": str(ex), "source": "eventbrite"}), 502
+    """
+    NOTE: Eventbrite deprecated their public events search API in 2020.
+    This endpoint only works for events from your own organization.
+    """
+    return jsonify({
+        "error": "Eventbrite public events search API was deprecated in 2020",
+        "info": "The Eventbrite API only allows access to your own organization's events",
+        "alternative": "Use the Ticketmaster API for public event search",
+        "documentation": "https://www.eventbrite.com/platform/docs"
+    }), 501
 
 
 @app.route('/api/events/ticketmaster', methods=['GET'])
@@ -744,39 +716,68 @@ def get_ticketmaster_events():
         return jsonify({"error": str(ex), "source": "ticketmaster"}), 502
 
 
+@app.route('/api/events/seatgeek', methods=['GET'])
+def get_seatgeek_events():
+    """Fetch public events from SeatGeek API."""
+    client_id = os.environ.get('SEATGEEK_CLIENT_ID')
+    if not client_id:
+        return jsonify({"error": "SeatGeek client_id not configured"}), 500
+
+    url = "https://api.seatgeek.com/2/events"
+    params = {
+        "client_id": client_id,
+        "venue.city": request.args.get("city", "Houston"),
+        "venue.state": request.args.get("state", "TX"),
+        "type": request.args.get("category"),  # concert, sports, theater, etc.
+        "q": request.args.get("q"),  # search query
+        "per_page": request.args.get("size", 25),
+        "page": request.args.get("page", 1),
+        "sort": "datetime_utc.asc",
+    }
+    params = {k: v for k, v in params.items() if v}
+
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        events = []
+
+        for e in data.get("events", []):
+            venue = e.get("venue", {})
+            events.append({
+                "id": e.get("id"),
+                "source": "seatgeek",
+                "name": e.get("title"),
+                "description": e.get("description"),
+                "start": e.get("datetime_local"),
+                "url": e.get("url"),
+                "venue": venue.get("name"),
+                "venue_address": f"{venue.get('address', '')}, {venue.get('city', '')}, {venue.get('state', '')}".strip(", "),
+                "image": e.get("performers", [{}])[0].get("image") if e.get("performers") else None,
+                "type": e.get("type"),
+                "score": e.get("score"),  # SeatGeek popularity score
+            })
+
+        return jsonify({
+            "events": events,
+            "pagination": {
+                "page": data.get("meta", {}).get("page"),
+                "per_page": data.get("meta", {}).get("per_page"),
+                "total": data.get("meta", {}).get("total")
+            },
+            "total": data.get("meta", {}).get("total", 0)
+        })
+    except Exception as ex:
+        return jsonify({"error": str(ex), "source": "seatgeek"}), 502
+
+
 @app.route('/api/events/all', methods=['GET'])
 def get_all_events():
-    """Aggregate events from all configured sources."""
+    """Aggregate events from all configured sources (Ticketmaster + SeatGeek)."""
     all_events = []
     errors = []
-
-    # Try Eventbrite
-    eb_token = os.environ.get('EVENTBRITE_API_KEY')
-    if eb_token:
-        try:
-            location = request.args.get("location", "Houston, TX")
-            eb_url = "https://www.eventbriteapi.com/v3/events/search/"
-            eb_params = {
-                "location.address": location,
-                "location.within": "25mi",
-                "expand": "venue",
-                "sort_by": "date",
-            }
-            headers = {"Authorization": f"Bearer {eb_token}"}
-            resp = requests.get(eb_url, params=eb_params, headers=headers, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            for e in data.get("events", []):
-                all_events.append({
-                    "id": f"eb_{e.get('id')}",
-                    "source": "eventbrite",
-                    "name": e.get("name", {}).get("text"),
-                    "start": e.get("start", {}).get("local"),
-                    "url": e.get("url"),
-                    "venue": e.get("venue", {}).get("address", {}).get("localized_address_display"),
-                })
-        except Exception as ex:
-            errors.append({"source": "eventbrite", "error": str(ex)})
+    city = request.args.get("city", "Houston")
+    state = request.args.get("state", "TX")
 
     # Try Ticketmaster
     tm_key = os.environ.get('TICKETMASTER_API_KEY')
@@ -785,9 +786,9 @@ def get_all_events():
             tm_url = "https://app.ticketmaster.com/discovery/v2/events"
             tm_params = {
                 "apikey": tm_key,
-                "city": request.args.get("city", "Houston"),
-                "stateCode": request.args.get("state", "TX"),
-                "size": 20,
+                "city": city,
+                "stateCode": state,
+                "size": 25,
                 "sort": "date,asc",
             }
             resp = requests.get(tm_url, params=tm_params, timeout=10)
@@ -800,20 +801,58 @@ def get_all_events():
                     "source": "ticketmaster",
                     "name": e.get("name"),
                     "start": e.get("dates", {}).get("start", {}).get("localDate"),
+                    "start_time": e.get("dates", {}).get("start", {}).get("localTime"),
                     "url": e.get("url"),
                     "venue": venue_info.get("name"),
+                    "image": e.get("images", [{}])[0].get("url") if e.get("images") else None,
                 })
         except Exception as ex:
             errors.append({"source": "ticketmaster", "error": str(ex)})
 
+    # Try SeatGeek
+    sg_client_id = os.environ.get('SEATGEEK_CLIENT_ID')
+    if sg_client_id:
+        try:
+            sg_url = "https://api.seatgeek.com/2/events"
+            sg_params = {
+                "client_id": sg_client_id,
+                "venue.city": city,
+                "venue.state": state,
+                "per_page": 25,
+                "sort": "datetime_utc.asc",
+            }
+            resp = requests.get(sg_url, params=sg_params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            for e in data.get("events", []):
+                venue = e.get("venue", {})
+                all_events.append({
+                    "id": f"sg_{e.get('id')}",
+                    "source": "seatgeek",
+                    "name": e.get("title"),
+                    "start": e.get("datetime_local"),
+                    "url": e.get("url"),
+                    "venue": venue.get("name"),
+                    "image": e.get("performers", [{}])[0].get("image") if e.get("performers") else None,
+                })
+        except Exception as ex:
+            errors.append({"source": "seatgeek", "error": str(ex)})
+
     # Sort all events by start date
     all_events.sort(key=lambda x: x.get("start", ""), reverse=False)
+
+    sources = []
+    if tm_key:
+        sources.append("ticketmaster")
+    if sg_client_id:
+        sources.append("seatgeek")
 
     return jsonify({
         "events": all_events,
         "total": len(all_events),
         "errors": errors if errors else None,
-        "sources_queried": ["eventbrite", "ticketmaster"]
+        "sources_queried": sources,
+        "note": "Combining events from multiple sources"
     })
 
 
