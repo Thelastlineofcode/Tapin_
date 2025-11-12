@@ -1,4 +1,4 @@
-ALLOWED_CATEGORIES = ['Community', 'Environment', 'Education', 'Health', 'Animals']
+ALLOWED_CATEGORIES = ['Community', 'Environment', 'Education', 'Health', 'Animals', 'Nightlife']
 import requests
 # Eventbrite Houston endpoint moved below after app initialization to ensure
 # Flask `app`, `request` and `jsonify` are available when the route is defined.
@@ -281,6 +281,82 @@ def login_user():
     # return both access and refresh tokens to the client
     from auth import token_pair
 
+    tokens = token_pair(user)
+
+    # --- Helper: Auto-populate Nightlife events for user's city on login ---
+    def auto_populate_nightlife_for_city(city, state):
+        """Call Gemini nightlife endpoint for the given city/state if no Nightlife listings exist."""
+        nightlife_exists = Listing.query.filter_by(category='Nightlife', location=city).first()
+        if nightlife_exists:
+            return False
+        from flask import current_app
+        with current_app.app_context():
+            try:
+                import google.generativeai as genai
+                from datetime import datetime as dt
+                gemini_key = os.environ.get('GEMINI_API_KEY')
+                if not gemini_key:
+                    return False
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel('gemini-2.5-flash')
+                today = dt.now().strftime('%B %d, %Y')
+                prompt = (
+                    f"""
+                    Find 5 upcoming nightclub or nightlife events in {city}, {state}, United States, happening after {today}.
+                    For each event, return a JSON object with: name, date, venue, address, url (if available), and a 1-sentence description.
+                    Respond with ONLY a JSON array of event objects, no extra text.
+                    """
+                )
+                response = model.generate_content(prompt)
+                import json
+                events = json.loads(response.text.strip())
+                now = dt.now()
+                for e in events:
+                    name = e.get('name')
+                    date_str = e.get('date')
+                    venue = e.get('venue') or city
+                    url = e.get('url')
+                    description = e.get('description') or ''
+                    if not name or not date_str:
+                        continue
+                    try:
+                        event_date = dt.fromisoformat(date_str)
+                        if event_date.date() < now.date():
+                            continue
+                    except Exception:
+                        pass
+                    existing = Listing.query.filter_by(title=name, location=venue).first()
+                    if existing:
+                        continue
+                    listing = Listing(
+                        title=name[:200],
+                        description=f"{description}\n\nEvent URL: {url or ''}\nDate: {date_str}",
+                        location=venue,
+                        latitude=None,
+                        longitude=None,
+                        category='Nightlife',
+                        image_url=None,
+                        owner_id=None
+                    )
+                    db.session.add(listing)
+                db.session.commit()
+                return True
+            except Exception:
+                db.session.rollback()
+                return False
+
+    # Call the helper function to auto-populate nightlife events for the user's city
+    try:
+        city = request.args.get("city", "Houston")
+        state = request.args.get("state", "TX")
+        auto_populate_nightlife_for_city(city, state)
+    except Exception as e:
+        app.logger.warning(f"Error in auto-populate nightlife: {e}")
+
+    # Try to auto-populate Nightlife events for user's city if provided
+    user_city = data.get('city') or 'Houston'
+    user_state = data.get('state') or 'TX'
+    auto_populate_nightlife_for_city(user_city, user_state)
     tokens = token_pair(user)
     return jsonify({"message": "login successful", "user": user.to_dict(), **tokens})
 
@@ -1101,7 +1177,7 @@ Respond with ONLY a JSON array of 3 category names to prioritize, like: ["music"
                         "sort": "date,asc"
                     }
 
-                    response_events = requests.get(url, params=params, timeout=10)
+                    response_events = requests.get(url, params=response_events, timeout=10)
                     if response_events.ok:
                         data = response_events.json()
                         events = data.get("_embedded", {}).get("events", [])
@@ -1186,6 +1262,103 @@ Respond with ONLY a JSON array of 3 category names to prioritize, like: ["music"
         db.session.rollback()
         return jsonify({"error": f"AI Agent error: {str(e)}"}), 500
 
+
+
+# --- Gemini-powered Nightlife Event Enrichment Endpoint ---
+@app.route('/api/agent/gemini-nightlife-events', methods=['POST'])
+def gemini_nightlife_events():
+    """
+    Use Gemini to search for local nightclub events in a given city/state and add them as local listings.
+    Request JSON: {"city": "CityName", "state": "StateCode"}
+    """
+    try:
+        import google.generativeai as genai
+        from datetime import datetime as dt
+
+        gemini_key = os.environ.get('GEMINI_API_KEY')
+        if not gemini_key:
+            return jsonify({"error": "Gemini API key not configured"}), 500
+
+        data = request.get_json() or {}
+        city = data.get('city', 'Houston')
+        state = data.get('state', 'TX')
+        if not city or not state:
+            return jsonify({"error": "city and state required"}), 400
+
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        # Prompt Gemini to search for upcoming nightclub events in the city/state
+        today = dt.now().strftime('%B %d, %Y')
+        prompt = (
+            f"""
+            Find 5 upcoming nightclub or nightlife events in {city}, {state}, United States, happening after {today}.
+            For each event, return a JSON object with: name, date, venue, address, url (if available), and a 1-sentence description.
+            Respond with ONLY a JSON array of event objects, no extra text.
+            """
+        )
+
+        response = model.generate_content(prompt)
+        import json
+        try:
+            events = json.loads(response.text.strip())
+        except Exception as ex:
+            return jsonify({"error": f"Gemini did not return valid JSON: {str(ex)}", "raw": response.text}), 502
+
+        created = []
+        now = dt.now()
+        for e in events:
+            # Check for required fields
+            name = e.get('name')
+            date_str = e.get('date')
+            venue = e.get('venue') or city
+            address = e.get('address') or f"{city}, {state}"
+            url = e.get('url')
+            description = e.get('description') or ''
+
+            # Skip if missing name or date
+            if not name or not date_str:
+                continue
+
+            # Skip past events if date is parseable
+            try:
+                event_date = dt.fromisoformat(date_str)
+                if event_date.date() < now.date():
+                    continue
+            except Exception:
+                pass  # If date can't be parsed, include anyway
+
+            # Check for duplicate (by name, date, and venue)
+            existing = Listing.query.filter_by(title=name, location=venue).first()
+            if existing:
+                continue
+
+            listing = Listing(
+                title=name[:200],
+                description=f"{description}\n\nEvent URL: {url or ''}\nDate: {date_str}",
+                location=venue,
+                latitude=None,
+                longitude=None,
+                category='Nightlife',
+                image_url=None,
+                owner_id=None
+            )
+            db.session.add(listing)
+            created.append(name)
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "created": len(created),
+            "listings": created,
+            "city": city,
+            "state": state,
+            "message": f"Added {len(created)} nightlife events for {city}, {state} via Gemini."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Gemini nightlife agent error: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
