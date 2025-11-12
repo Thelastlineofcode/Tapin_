@@ -19,6 +19,9 @@ itsdangerous>=2.1
 Werkzeug>=2.2
 python-dotenv>=0.21
 
+# HTTP requests for external APIs
+requests>=2.31
+
 # CLI utilities
 click>=8.0
 
