@@ -25,7 +25,10 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(!token);
   const [user, setUser] = useState(null);
   const [viewMode, setViewMode] = useState("list"); // 'list' or 'map'
-  const [userLocation, setUserLocation] = useState(null); // Store user's selected location
+  const [userLocation, setUserLocation] = useState({
+    city: "Houston",
+    state: "TX",
+  }); // Default to Houston, TX
 
   // Helper: fetch listings optionally filtered by q
   async function fetchListings(filter) {
@@ -152,12 +155,20 @@ export default function App() {
             />
           </div>
         )}
-
-        <Filters active={activeFilter} onChange={handleFilterChange} />
+        <LocationSelector
+          onLocationSelected={(loc) => {
+            if (loc.name && loc.name.includes(",")) {
+              const [city, state] = loc.name.split(",").map((s) => s.trim());
+              setUserLocation({ city, state });
+            } else if (loc.city && loc.state) {
+              setUserLocation({ city: loc.city, state: loc.state });
+            }
+          }}
+        />
       </div>
 
       <main>
-        <EventsByCategory />
+        <EventsByCategory userLocation={userLocation} />
         {/* View Mode Toggle */}
         {!loading && !error && listings.length > 0 && (
           <div style={{ marginBottom: "20px", textAlign: "center" }}>

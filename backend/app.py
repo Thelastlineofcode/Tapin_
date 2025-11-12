@@ -1,3 +1,4 @@
+ALLOWED_CATEGORIES = ['Community', 'Environment', 'Education', 'Health', 'Animals']
 import requests
 # Eventbrite Houston endpoint moved below after app initialization to ensure
 # Flask `app`, `request` and `jsonify` are available when the route is defined.
@@ -113,7 +114,7 @@ class Listing(db.Model):
     location = db.Column(db.String(200))
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
-    category = db.Column(db.String(100), nullable=True)  # Community, Environment, Education, Health, Animals
+    category = db.Column(db.String(100), nullable=True)  # See ALLOWED_CATEGORIES for valid values
     image_url = db.Column(db.String(500), nullable=True)  # URL to listing image
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -400,8 +401,7 @@ def get_listings():
     query = Listing.query
     if q:
         # Check if q matches a category exactly (case-insensitive)
-        categories = ['Community', 'Environment', 'Education', 'Health', 'Animals']
-        if q.lower() in [c.lower() for c in categories]:
+        if q.lower() in [c.lower() for c in ALLOWED_CATEGORIES]:
             # Filter by category
             query = query.filter(Listing.category.ilike(q))
         else:
@@ -426,8 +426,7 @@ def create_listing():
     owner_id = int(get_jwt_identity())
     # Validate optional category
     category = data.get('category')
-    allowed = ['Community', 'Environment', 'Education', 'Health', 'Animals']
-    if category and category not in allowed:
+    if category and category not in ALLOWED_CATEGORIES:
         return jsonify({"error": "invalid category"}), 400
 
     # Parse optional coordinates
@@ -475,8 +474,7 @@ def update_listing(id):
     # Optional fields
     if 'category' in data:
         category = data.get('category')
-        allowed = ['Community', 'Environment', 'Education', 'Health', 'Animals']
-        if category and category not in allowed:
+        if category and category not in ALLOWED_CATEGORIES:
             return jsonify({"error": "invalid category"}), 400
         listing.category = category
     if 'image_url' in data:
